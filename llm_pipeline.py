@@ -56,7 +56,9 @@ Context (retrieved documents relevant to the question):
 {context}
 
 Question: {question}
-Answer:""" # Ensure no extra newlines or spaces after "Answer:"
+Answer: 
+/think
+""" # Ensure no extra newlines or spaces after "Answer:"
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_template)
 
 
@@ -116,8 +118,7 @@ def load_llm_logic(model_path_arg):
     model = AutoModelForCausalLM.from_pretrained(
         model_path_arg,
         torch_dtype=torch.float16,
-        device_map="auto",
-        load_in_8bit=True  # <<< ADDED FOR 8-BIT QUANTIZATION
+        device_map="auto"
     )
     logging.info(f"Model loaded on device: {model.device} with dtype: {model.dtype} (8-bit quantization enabled)")
 
@@ -125,7 +126,7 @@ def load_llm_logic(model_path_arg):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=768 # Should be enough for concise answers
+        max_new_tokens=32768 # Should be enough for concise answers
     )
     llm = HuggingFacePipeline(pipeline=hf_transformers_pipeline)
     logging.info("HuggingFacePipeline (from langchain-huggingface) created.")
