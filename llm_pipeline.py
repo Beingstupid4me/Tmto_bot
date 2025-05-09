@@ -3,21 +3,26 @@ import glob
 import torch
 from pathlib import Path
 from typing import List, Dict, Any
+import logging # For more detailed logging
 
+# Configure basic logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# LangChain imports - addressing deprecation for ChatMessageHistory
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
-from langchain.memory import ConversationBufferMemory, ChatMessageHistory # Added ChatMessageHistory
+from langchain.memory import ConversationBufferMemory
+from langchain_community.chat_message_histories import ChatMessageHistory # Updated import
 from langchain.prompts import PromptTemplate
-# from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline # Old import
-from langchain_huggingface import HuggingFacePipeline # New import
+from langchain_huggingface import HuggingFacePipeline
 from langchain.chains import ConversationalRetrievalChain
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline as transformers_pipeline # Renamed to avoid conflict
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline as transformers_pipeline
 
 # --- Configuration ---
-MODEL_PATH = "../Qwen3-8B" # Adjusted path as per your error log
+MODEL_PATH = "../Qwen3-8B"
 DOCUMENTS_PATH = "./Documents"
 CONTEXT_FILE_PATH = "./context.txt"
 CHUNK_SIZE = 1500
@@ -66,35 +71,35 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_template)
 
 def load_and_split_documents_logic():
     documents = []
-    print(f"Loading core context from: {CONTEXT_FILE_PATH}")
+    logging.info(f"Loading core context from: {CONTEXT_FILE_PATH}")
     if os.path.exists(CONTEXT_FILE_PATH):
         context_loader = TextLoader(CONTEXT_FILE_PATH, encoding='utf-8')
         documents.extend(context_loader.load())
     else:
-        print(f"Warning: Core context file not found at {CONTEXT_FILE_PATH}")
+        logging.warning(f"Core context file not found at {CONTEXT_FILE_PATH}")
 
-    print(f"Loading PDF documents from: {DOCUMENTS_PATH}")
+    logging.info(f"Loading PDF documents from: {DOCUMENTS_PATH}")
     pdf_files = glob.glob(os.path.join(DOCUMENTS_PATH, "*.pdf"))
     
     if not Path(DOCUMENTS_PATH).exists() or not Path(DOCUMENTS_PATH).is_dir():
-        print(f"Warning: Documents path '{DOCUMENTS_PATH}' not found or is not a directory.")
+        logging.warning(f"Documents path '{DOCUMENTS_PATH}' not found or is not a directory.")
         if not documents:
              raise RuntimeError("No documents could be loaded (neither context.txt nor PDFs). OTMT-Pal cannot function.")
     elif not pdf_files and not documents:
-        print("Warning: No PDF documents found in ./Documents and no context.txt. Functionality will be limited.")
+        logging.warning("No PDF documents found in ./Documents and no context.txt. Functionality will be limited.")
     
     for pdf_file in pdf_files:
         try:
             loader = PyPDFLoader(pdf_file)
             documents.extend(loader.load())
-            print(f"Loaded {pdf_file}")
+            logging.info(f"Loaded {pdf_file}")
         except Exception as e:
-            print(f"Error loading {pdf_file}: {e}")
+            logging.error(f"Error loading {pdf_file}: {e}")
 
     if not documents:
         raise RuntimeError("No documents loaded at all. Exiting initialization.")
 
-    print(f"Loaded {len(documents)} document sections initially.")
+    logging.info(f"Loaded {len(documents)} document sections initially.")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
@@ -102,41 +107,39 @@ def load_and_split_documents_logic():
         add_start_index=True,
     )
     split_docs = text_splitter.split_documents(documents)
-    print(f"Split into {len(split_docs)} chunks.")
+    logging.info(f"Split into {len(split_docs)} chunks.")
     return split_docs
 
 def create_bm25_retriever_logic(split_docs):
-    print("Initializing BM25 Retriever...")
+    logging.info("Initializing BM25 Retriever...")
     bm25_retriever = BM25Retriever.from_documents(split_docs, k=BM25_K)
-    print("BM25 Retriever initialized.")
+    logging.info("BM25 Retriever initialized.")
     return bm25_retriever
 
-def load_llm_logic(model_path_arg): # Renamed argument to avoid conflict with global
-    print(f"Loading model from: {model_path_arg}")
+def load_llm_logic(model_path_arg):
+    logging.info(f"Loading model from: {model_path_arg}")
     tokenizer = AutoTokenizer.from_pretrained(model_path_arg)
     model = AutoModelForCausalLM.from_pretrained(
         model_path_arg,
         torch_dtype=torch.float16,
         device_map="auto",
     )
-    print(f"Model loaded on device: {model.device} with dtype: {model.dtype}")
+    logging.info(f"Model loaded on device: {model.device} with dtype: {model.dtype}")
 
-    # Use transformers_pipeline alias to avoid conflict with any other 'pipeline' variable
     hf_transformers_pipeline = transformers_pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
         max_new_tokens=768,
     )
-    # Use the new HuggingFacePipeline from langchain_huggingface
     llm = HuggingFacePipeline(pipeline=hf_transformers_pipeline)
-    print("HuggingFacePipeline (from langchain-huggingface) created.")
+    logging.info("HuggingFacePipeline (from langchain-huggingface) created.")
     return llm
 
 def initialize_rag_components():
     global LLM_INSTANCE, RETRIEVER_INSTANCE
     
-    print("Initializing RAG components...")
+    logging.info("Initializing RAG components...")
     if not Path(MODEL_PATH).exists() or not Path(MODEL_PATH).is_dir():
         raise RuntimeError(f"Model path '{MODEL_PATH}' not found. Please download the model.")
 
@@ -145,44 +148,57 @@ def initialize_rag_components():
         raise RuntimeError("Failed to load and split documents. Cannot initialize.")
     
     RETRIEVER_INSTANCE = create_bm25_retriever_logic(split_docs)
-    LLM_INSTANCE = load_llm_logic(MODEL_PATH) # Pass the global MODEL_PATH
-    print("RAG components initialized successfully.")
+    LLM_INSTANCE = load_llm_logic(MODEL_PATH)
+    logging.info("RAG components initialized successfully.")
 
 def get_rag_chain_response(question: str, chat_history_messages: List[BaseMessage]) -> Dict[str, Any]:
     if not LLM_INSTANCE or not RETRIEVER_INSTANCE:
+        logging.error("RAG components not initialized attempt to call get_rag_chain_response.")
         raise RuntimeError("RAG components not initialized. Call initialize_rag_components() first.")
 
-    # --- Corrected Memory Initialization ---
+    logging.info(f"Getting RAG chain response for question: '{question}'")
+    logging.info(f"Number of messages in provided history: {len(chat_history_messages)}")
+
     current_chat_history_obj = ChatMessageHistory()
     for msg in chat_history_messages:
         if isinstance(msg, HumanMessage):
             current_chat_history_obj.add_user_message(msg.content)
         elif isinstance(msg, AIMessage):
             current_chat_history_obj.add_ai_message(msg.content)
-        # else: you might want to handle other BaseMessage types if they occur
+    logging.info("ChatMessageHistory object created and populated.")
 
+    # The ConversationBufferMemory deprecation warning points to a migration guide.
+    # For now, we keep it as is, as it was working before the hang.
+    # If the hang persists, this might be the next area to investigate via the guide.
     memory = ConversationBufferMemory(
         memory_key="chat_history",
         return_messages=True,
         output_key='answer',
-        chat_memory=current_chat_history_obj # Pass the populated history object
+        chat_memory=current_chat_history_obj
     )
-    # --- End of Memory Correction ---
+    logging.info(f"ConversationBufferMemory initialized. Memory buffer: {memory.load_memory_variables({})}")
 
+    logging.info("Creating ConversationalRetrievalChain...")
     chain = ConversationalRetrievalChain.from_llm(
         llm=LLM_INSTANCE,
         retriever=RETRIEVER_INSTANCE,
         memory=memory,
         combine_docs_chain_kwargs={"prompt": CONDENSE_QUESTION_PROMPT},
         return_source_documents=True,
-        verbose=False
+        verbose=True # <<< SETTING CHAIN TO VERBOSE FOR DETAILED LOGGING
     )
+    logging.info("ConversationalRetrievalChain created.")
     
-    result = chain.invoke({"question": question})
-    return result
+    logging.info(f"Invoking chain with question: '{question}'")
+    try:
+        result = chain.invoke({"question": question})
+        logging.info("Chain invocation complete.")
+        return result
+    except Exception as e:
+        logging.error(f"Exception during chain invocation: {e}", exc_info=True)
+        raise
 
-# --- Helper to convert Pydantic-like history to LangChain messages ---
-# (This is used by backend.py, but good to keep it co-located if testing standalone)
+# --- Helper functions for backend.py (if used) ---
 def convert_to_langchain_messages(history: List[Dict[str, str]]) -> List[BaseMessage]:
     messages = []
     for item in history:
@@ -192,8 +208,6 @@ def convert_to_langchain_messages(history: List[Dict[str, str]]) -> List[BaseMes
             messages.append(AIMessage(content=item["content"]))
     return messages
 
-# --- Helper to convert LangChain messages to Pydantic-like history ---
-# (This is used by backend.py)
 def convert_to_serializable_history(messages: List[BaseMessage]) -> List[Dict[str, str]]:
     history = []
     for msg in messages:
@@ -204,31 +218,36 @@ def convert_to_serializable_history(messages: List[BaseMessage]) -> List[Dict[st
     return history
 
 if __name__ == '__main__':
-    print("Testing llm_pipeline.py (formerly core_logic.py)...")
+    logging.info("Starting llm_pipeline.py test script...")
     try:
         initialize_rag_components()
-        print("\nInitialization complete. Testing a sample query...")
+        logging.info("Initialization complete. Testing a simple sample query...")
         
-        sample_question = "What is IIITD?"
-        lc_history_empty = [] # Start with empty LangChain message history
+        sample_question = "Hello" # Simplest possible question
+        lc_history_empty = []
         
+        logging.info(f"Test 1: Sending question '{sample_question}' with empty history.")
         response_data = get_rag_chain_response(sample_question, lc_history_empty)
-        print(f"\nQuestion: {sample_question}")
-        print(f"Answer: {response_data['answer']}")
+        
+        logging.info(f"\nQuestion: {sample_question}")
+        logging.info(f"Answer: {response_data['answer']}")
         
         # Simulate a follow-up
-        # Create LangChain messages for history
+        logging.info("Test 2: Simulating a follow-up question.")
         lc_history_one_turn = [
             HumanMessage(content=sample_question),
             AIMessage(content=response_data['answer'])
         ]
-        follow_up_question = "Who are its key faculty?"
+        follow_up_question = "What is OTMT?"
         
+        logging.info(f"Sending follow-up question '{follow_up_question}' with one turn history.")
         response_data_followup = get_rag_chain_response(follow_up_question, lc_history_one_turn)
-        print(f"\nFollow-up Question: {follow_up_question}")
-        print(f"Follow-up Answer: {response_data_followup['answer']}")
+        
+        logging.info(f"\nFollow-up Question: {follow_up_question}")
+        logging.info(f"Follow-up Answer: {response_data_followup['answer']}")
 
     except Exception as e:
-        print(f"Error during llm_pipeline.py test: {e}")
-        import traceback
-        traceback.print_exc()
+        logging.error(f"Error during llm_pipeline.py test: {e}", exc_info=True)
+        # import traceback # No longer needed due to exc_info=True in logging
+        # traceback.print_exc()
+    logging.info("llm_pipeline.py test script finished.")
