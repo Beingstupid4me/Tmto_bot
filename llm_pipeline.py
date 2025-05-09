@@ -24,7 +24,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline as transf
 # CRITICAL: Ensure this path points to a CHAT or INSTRUCT model, not a BASE model.
 # For example: "Qwen/Qwen1.5-7B-Chat" or your local equivalent path.
 # If MODEL_PATH points to a BASE model, prompt leaking is expected.
-MODEL_PATH = "../Qwen2.5-3B-Instruct" # Replace with your CHAT/INSTRUCT model path if this is a base model
+MODEL_PATH = "../Qwen3-4B" # Replace with your CHAT/INSTRUCT model path if this is a base model
 DOCUMENTS_PATH = "./Documents"
 CONTEXT_FILE_PATH = "./context.txt"
 CHUNK_SIZE = 1500
@@ -57,7 +57,6 @@ Context (retrieved documents relevant to the question):
 
 Question: {question}
 Answer: 
-/think
 """ # Ensure no extra newlines or spaces after "Answer:"
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_template)
 
