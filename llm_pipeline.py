@@ -126,7 +126,7 @@ def load_llm_logic(model_path_arg):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=32768 # Should be enough for concise answers
+        max_new_tokens=1024 # Should be enough for concise answers
     )
     llm = HuggingFacePipeline(pipeline=hf_transformers_pipeline)
     logging.info("HuggingFacePipeline (from langchain-huggingface) created.")
