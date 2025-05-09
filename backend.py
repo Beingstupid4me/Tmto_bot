@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 import logging # Added for consistency
 
 from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Import the module itself, and specific functions you need from it
@@ -24,6 +25,15 @@ app = FastAPI(
     title="OTMT-Pal API with Sessions",
     description="API for IIITD OTMT Chatbot with session management.",
     version="1.1.0"
+)
+
+# --- CORS Middleware ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with specific domains in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- Session Management ---
