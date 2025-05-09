@@ -7,8 +7,8 @@ from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
 
 # Import the module itself, and specific functions you need from it
-import llm_pipeline # Import the module
-from llm_pipeline import ( # Import necessary functions
+import llm_tester # Import the module
+from llm_tester import ( # Import necessary functions
     initialize_rag_components,
     get_rag_chain_response,
     convert_to_langchain_messages,
