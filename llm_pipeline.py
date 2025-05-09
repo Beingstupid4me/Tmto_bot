@@ -29,7 +29,7 @@ DOCUMENTS_PATH = "./Documents"
 CONTEXT_FILE_PATH = "./context.txt"
 CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 200
-BM25_K = 5 # Number of documents for BM25
+BM25_K = 30 # Number of documents for BM25
 
 # --- Global Instances (initialized once) ---
 LLM_INSTANCE = None
