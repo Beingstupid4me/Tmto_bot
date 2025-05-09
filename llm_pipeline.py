@@ -2,21 +2,22 @@ import os
 import glob
 import torch
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import List, Dict, Any
 
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferMemory, ChatMessageHistory # Added ChatMessageHistory
 from langchain.prompts import PromptTemplate
-from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+# from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline # Old import
+from langchain_huggingface import HuggingFacePipeline # New import
 from langchain.chains import ConversationalRetrievalChain
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline as transformers_pipeline # Renamed to avoid conflict
 
 # --- Configuration ---
-MODEL_PATH = "../Qwen3-8B"
+MODEL_PATH = "../Qwen3-8B" # Adjusted path as per your error log
 DOCUMENTS_PATH = "./Documents"
 CONTEXT_FILE_PATH = "./context.txt"
 CHUNK_SIZE = 1500
@@ -26,11 +27,10 @@ BM25_K = 5
 # --- Global Instances (initialized once) ---
 LLM_INSTANCE = None
 RETRIEVER_INSTANCE = None
-# SPLIT_DOCS_INSTANCE = None # Not strictly needed globally if retriever is main user
 
 # --- Prompt Template ---
 _template = """You are "OTMT-Pal", a helpful AI assistant for the Office of Technology Management and Transfer (OTMT) at IIIT-Delhi.
-Your developer is [Your Name/Team Name - ensure this is in context.txt or updated here]. You are built using Langchain and a Qwen model.
+Your developer is Amartya Singh (amartya22062@iiitd.ac.in) and Anish Dev (anish22075@iiitd.ac.in). You are built using Langchain and a Qwen model.
 IIIT-Delhi (Indraprastha Institute of Information Technology, Delhi) is a state university in Delhi, India.
 TRL (Technology Readiness Level) assessment is a method for estimating the maturity of technologies.
 
@@ -76,12 +76,11 @@ def load_and_split_documents_logic():
     print(f"Loading PDF documents from: {DOCUMENTS_PATH}")
     pdf_files = glob.glob(os.path.join(DOCUMENTS_PATH, "*.pdf"))
     
-    # Ensure documents path exists, but allow context.txt to be the only source initially
     if not Path(DOCUMENTS_PATH).exists() or not Path(DOCUMENTS_PATH).is_dir():
         print(f"Warning: Documents path '{DOCUMENTS_PATH}' not found or is not a directory.")
-        if not documents: # If context.txt also wasn't found or was empty
+        if not documents:
              raise RuntimeError("No documents could be loaded (neither context.txt nor PDFs). OTMT-Pal cannot function.")
-    elif not pdf_files and not documents: # if no context.txt and no pdfs
+    elif not pdf_files and not documents:
         print("Warning: No PDF documents found in ./Documents and no context.txt. Functionality will be limited.")
     
     for pdf_file in pdf_files:
@@ -112,31 +111,32 @@ def create_bm25_retriever_logic(split_docs):
     print("BM25 Retriever initialized.")
     return bm25_retriever
 
-def load_llm_logic(model_path):
-    print(f"Loading model from: {model_path}")
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
+def load_llm_logic(model_path_arg): # Renamed argument to avoid conflict with global
+    print(f"Loading model from: {model_path_arg}")
+    tokenizer = AutoTokenizer.from_pretrained(model_path_arg)
     model = AutoModelForCausalLM.from_pretrained(
-        model_path,
-        torch_dtype=torch.float16, # Using float16 for V100
+        model_path_arg,
+        torch_dtype=torch.float16,
         device_map="auto",
     )
     print(f"Model loaded on device: {model.device} with dtype: {model.dtype}")
 
-    hf_pipeline = pipeline(
+    # Use transformers_pipeline alias to avoid conflict with any other 'pipeline' variable
+    hf_transformers_pipeline = transformers_pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
         max_new_tokens=768,
     )
-    llm = HuggingFacePipeline(pipeline=hf_pipeline)
-    print("HuggingFacePipeline created.")
+    # Use the new HuggingFacePipeline from langchain_huggingface
+    llm = HuggingFacePipeline(pipeline=hf_transformers_pipeline)
+    print("HuggingFacePipeline (from langchain-huggingface) created.")
     return llm
 
 def initialize_rag_components():
     global LLM_INSTANCE, RETRIEVER_INSTANCE
     
     print("Initializing RAG components...")
-    # Ensure model path exists
     if not Path(MODEL_PATH).exists() or not Path(MODEL_PATH).is_dir():
         raise RuntimeError(f"Model path '{MODEL_PATH}' not found. Please download the model.")
 
@@ -145,25 +145,29 @@ def initialize_rag_components():
         raise RuntimeError("Failed to load and split documents. Cannot initialize.")
     
     RETRIEVER_INSTANCE = create_bm25_retriever_logic(split_docs)
-    LLM_INSTANCE = load_llm_logic(MODEL_PATH)
+    LLM_INSTANCE = load_llm_logic(MODEL_PATH) # Pass the global MODEL_PATH
     print("RAG components initialized successfully.")
 
 def get_rag_chain_response(question: str, chat_history_messages: List[BaseMessage]) -> Dict[str, Any]:
     if not LLM_INSTANCE or not RETRIEVER_INSTANCE:
         raise RuntimeError("RAG components not initialized. Call initialize_rag_components() first.")
 
+    # --- Corrected Memory Initialization ---
+    current_chat_history_obj = ChatMessageHistory()
+    for msg in chat_history_messages:
+        if isinstance(msg, HumanMessage):
+            current_chat_history_obj.add_user_message(msg.content)
+        elif isinstance(msg, AIMessage):
+            current_chat_history_obj.add_ai_message(msg.content)
+        # else: you might want to handle other BaseMessage types if they occur
+
     memory = ConversationBufferMemory(
         memory_key="chat_history",
         return_messages=True,
         output_key='answer',
-        chat_memory=None # Will be populated by adding messages
+        chat_memory=current_chat_history_obj # Pass the populated history object
     )
-    for msg in chat_history_messages:
-        if isinstance(msg, HumanMessage):
-            memory.chat_memory.add_user_message(msg.content)
-        elif isinstance(msg, AIMessage):
-            memory.chat_memory.add_ai_message(msg.content)
-        # else: ignore other types for this simple memory
+    # --- End of Memory Correction ---
 
     chain = ConversationalRetrievalChain.from_llm(
         llm=LLM_INSTANCE,
@@ -178,6 +182,7 @@ def get_rag_chain_response(question: str, chat_history_messages: List[BaseMessag
     return result
 
 # --- Helper to convert Pydantic-like history to LangChain messages ---
+# (This is used by backend.py, but good to keep it co-located if testing standalone)
 def convert_to_langchain_messages(history: List[Dict[str, str]]) -> List[BaseMessage]:
     messages = []
     for item in history:
@@ -188,6 +193,7 @@ def convert_to_langchain_messages(history: List[Dict[str, str]]) -> List[BaseMes
     return messages
 
 # --- Helper to convert LangChain messages to Pydantic-like history ---
+# (This is used by backend.py)
 def convert_to_serializable_history(messages: List[BaseMessage]) -> List[Dict[str, str]]:
     history = []
     for msg in messages:
@@ -198,26 +204,25 @@ def convert_to_serializable_history(messages: List[BaseMessage]) -> List[Dict[st
     return history
 
 if __name__ == '__main__':
-    # This block is for testing core_logic.py directly
-    print("Testing core_logic.py...")
+    print("Testing llm_pipeline.py (formerly core_logic.py)...")
     try:
         initialize_rag_components()
         print("\nInitialization complete. Testing a sample query...")
         
         sample_question = "What is IIITD?"
-        # Simulate an empty chat history for the first call
-        lc_history_empty = []
+        lc_history_empty = [] # Start with empty LangChain message history
         
         response_data = get_rag_chain_response(sample_question, lc_history_empty)
         print(f"\nQuestion: {sample_question}")
         print(f"Answer: {response_data['answer']}")
         
         # Simulate a follow-up
+        # Create LangChain messages for history
         lc_history_one_turn = [
             HumanMessage(content=sample_question),
             AIMessage(content=response_data['answer'])
         ]
-        follow_up_question = "Who are its key faculty?" # This might not be in your docs, good test for "I don't know"
+        follow_up_question = "Who are its key faculty?"
         
         response_data_followup = get_rag_chain_response(follow_up_question, lc_history_one_turn)
         print(f"\nFollow-up Question: {follow_up_question}")
