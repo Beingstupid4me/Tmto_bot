@@ -85,7 +85,7 @@ def get_or_create_session(session_key: Optional[str]) -> tuple[str, List[Dict[st
 @app.post("/chat/", response_model=ChatTurnResponse)
 async def handle_chat_turn(request: ChatTurnRequest = Body(...)):
     # Access LLM_INSTANCE through the llm_pipeline module
-    if not llm_pipeline.LLM_INSTANCE or not llm_pipeline.RETRIEVER_INSTANCE:
+    if not llm_tester.LLM_INSTANCE or not llm_tester.RETRIEVER_INSTANCE:
         logging.warning("Backend: /chat/ called but llm_pipeline.LLM_INSTANCE or RETRIEVER_INSTANCE is not set.")
         raise HTTPException(status_code=503, detail="System is not ready or failed to initialize. Please try again later.")
 
@@ -125,7 +125,7 @@ async def handle_chat_turn(request: ChatTurnRequest = Body(...)):
 @app.get("/health")
 async def health_check():
     # Access globals through the llm_pipeline module
-    if llm_pipeline.LLM_INSTANCE and llm_pipeline.RETRIEVER_INSTANCE:
+    if llm_tester.LLM_INSTANCE and llm_tester.RETRIEVER_INSTANCE:
          return {"status": "ok", "message": "OTMT-Pal API is running and RAG components (from llm_pipeline) are initialized."}
     logging.warning("Backend: /health check found RAG components (from llm_pipeline) not initialized.")
     return {"status": "degraded", "message": "RAG components (from llm_pipeline) not fully initialized."}
