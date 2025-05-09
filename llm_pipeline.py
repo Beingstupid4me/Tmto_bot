@@ -48,7 +48,7 @@ STRICTLY ADHERE to the following:
 3.  DO NOT answer general knowledge questions, give advice on unrelated topics (e.g., how to sing, pizza recipes, coding unrelated to IIITD tech), or provide information not found in the Context.
 4.  DO NOT make up information.
 5.  Begin your answer directly without repeating or rephrasing my instructions or persona.
-
+6.  Decline humbly for any out-of-scope question.
 Chat History (for context of the current conversation):
 {chat_history}
 
@@ -182,7 +182,7 @@ def get_rag_chain_response(question: str, chat_history_messages: List[BaseMessag
         retriever=RETRIEVER_INSTANCE,
         memory=memory,
         combine_docs_chain_kwargs={"prompt": CONDENSE_QUESTION_PROMPT},
-        return_source_documents=True,
+        return_source_documents=False,
         verbose=False # <<< SET CHAIN TO VERBOSE=FALSE
     )
     # logging.info("ConversationalRetrievalChain created.")
