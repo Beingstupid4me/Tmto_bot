@@ -101,7 +101,7 @@ def load_llm_logic(model_path_arg):
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=1024, # Generous for answers
+        max_new_tokens=2048, # Generous for answers
         # These can help with cleaner generation for some models:
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
