@@ -22,7 +22,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline as transformers_pipeline
 
 # --- Configuration ---
-MODEL_PATH = "../Qwen3-8B-Base"
+MODEL_PATH = "../Qwen3-4B"
 DOCUMENTS_PATH = "./Documents"
 CONTEXT_FILE_PATH = "./context.txt"
 CHUNK_SIZE = 1500
