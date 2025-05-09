@@ -182,7 +182,7 @@ def get_rag_chain_response(question: str, chat_history_messages: List[BaseMessag
         retriever=RETRIEVER_INSTANCE,
         memory=memory,
         combine_docs_chain_kwargs={"prompt": CONDENSE_QUESTION_PROMPT},
-        return_source_documents=False,
+        return_source_documents=True,
         verbose=False # <<< SET CHAIN TO VERBOSE=FALSE
     )
     # logging.info("ConversationalRetrievalChain created.")
